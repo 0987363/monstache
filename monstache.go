@@ -421,9 +421,12 @@ func ensureFileMappingMapperAttachment(conn *elastic.Client, namespace string, c
 }
 
 func defaultIndexTypeMapping(op *gtm.Op) *indexTypeMapping {
+	t := op.Id.(bson.ObjectId)
+
 	return &indexTypeMapping{
 		Namespace: op.Namespace,
-		Index:     normalizeIndexName(op.Namespace),
+		Index:     fmt.Sprintf("%s-%s", normalizeIndexName(op.Namespace), t.Time().Format("2006.01")),
+//		Index:     normalizeIndexName(op.Namespace),
 		Type:      normalizeTypeName(op.GetCollection()),
 	}
 }
@@ -1446,6 +1449,7 @@ func doIndexing(config *configOptions, mongo *mgo.Session, bulk *elastic.BulkPro
 	}
 	req := elastic.NewBulkIndexRequest()
 
+
 	req.Id(objectID)
 	req.Index(indexType.Index)
 	req.Type(indexType.Type)
@@ -2058,6 +2062,10 @@ func notifySd(config *configOptions) {
 	}
 }
 
+func init() {
+	time.Local = time.UTC
+}
+
 func main() {
 	enabled := true
 	config := &configOptions{
@@ -2358,6 +2366,10 @@ func main() {
 			} else if op.IsDelete() {
 				doDelete(mongo, bulk, op)
 			} else if op.Data != nil {
+				if (op.Data)["loc"] != nil && (op.Data)["latitude"] != nil && (op.Data)["longitude"] != nil {
+					(op.Data)["geo_point"] = elastic.GeoPointFromLatLon((op.Data)["latitude"].(float64), (op.Data)["longitude"].(float64))
+//					(op.Data)["geo_point"] = []float64{(op.Data)["latitude"].(float64), (op.Data)["longitude"].(float64)}
+				}
 				ingestAttachment := false
 				if ingestAttachment, err = doFileContent(mongo, op, config); err != nil {
 					gtmCtx.ErrC <- err
